@@ -1,81 +1,61 @@
 import streamlit as st
 import sqlite3
 import pandas as pd
+import PyPDF2
+import re
 
-# Database setup
+# Database connection
 conn = sqlite3.connect("vocab.db", check_same_thread=False)
 c = conn.cursor()
 c.execute('CREATE TABLE IF NOT EXISTS words (word TEXT, meaning TEXT)')
 conn.commit()
 
-# --- BULK UPLOAD MAGIC ---
-# Ye list tere saare words ko ek baar mein bhar degi
-initial_words = [
-    ("Abhor", "To hate something very much"),
-    ("Ameliorate", "To make something better"),
-    ("Anomalous", "Different from what is normal"),
-    ("Bellicose", "Willing to fight; aggressive"),
-    ("Cacophony", "A harsh, unpleasant mixture of sounds"),
-    ("Dearth", "A lack or shortage of something"),
-    ("Ephemeral", "Lasting for a very short time"),
-    ("Garrulous", "Excessively talkative"),
-    ("Inundate", "To overwhelm with things or people"),
-    ("Lethargic", "Lacking energy; lazy")
-    # Maine abhi 10 daale hain, tu isi format mein baaki jod sakta hai
-]
+st.set_page_config(page_title="Vocab Beast Pro", layout="wide")
 
-# Check agar database khali hai toh hi dalo
-c.execute("SELECT COUNT(*) FROM words")
-if c.fetchone()[0] == 0:
-    c.executemany("INSERT INTO words (word, meaning) VALUES (?, ?)", initial_words)
-    conn.commit()
+# Sidebar for PDF Upload
+with st.sidebar:
+    st.title("📤 PDF se Words Nikalo")
+    pdf_file = st.file_uploader("Apni PDF select karo", type="pdf")
+    
+    if pdf_file:
+        if st.button("Extract aur Save Karein"):
+            reader = PyPDF2.PdfReader(pdf_file)
+            count = 0
+            for page in reader.pages:
+                text = page.extract_text()
+                # Ye pattern "Word - Meaning" ya "Word: Meaning" ko dhoondta hai
+                matches = re.findall(r'([A-Za-z]+)\s*[:\-]\s*(.+)', text)
+                for word, meaning in matches:
+                    c.execute("INSERT INTO words (word, meaning) VALUES (?, ?)", (word.strip(), meaning.strip()))
+                    count += 1
+            conn.commit()
+            st.success(f"Bhai, {count} naye words add ho gaye! 🎉")
+            st.rerun()
 
-st.set_page_config(page_title="Vocab Beast Pro", layout="centered")
-
-# CSS for Flip Card
-st.markdown("""
-<style>
-    .card-container { perspective: 1000px; width: 100%; height: 300px; margin: 20px auto; }
-    .card-inner { position: relative; width: 100%; height: 100%; transition: transform 0.6s; transform-style: preserve-3d; cursor: pointer; }
-    .card-flip { transform: rotateY(180deg); }
-    .card-front, .card-back { position: absolute; width: 100%; height: 100%; backface-visibility: hidden; display: flex; align-items: center; justify-content: center; border-radius: 20px; font-size: 32px; font-weight: bold; color: white; text-align: center; padding: 20px; }
-    .card-front { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
-    .card-back { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); transform: rotateY(180deg); }
-</style>
-""", unsafe_allow_html=True)
-
-st.title("Vocab Beast Pro ⚡")
+# --- Main Interface (Cards) ---
+st.title("Vocab Beast: PDF Edition ⚡")
 
 if 'idx' not in st.session_state: st.session_state.idx = 0
 if 'flipped' not in st.session_state: st.session_state.flipped = False
 
-# Fetch Data
 df = pd.read_sql_query("SELECT * FROM words", conn)
 
 if not df.empty:
+    # Card Display Logic (Wahi purana mast wala)
     current_word = df.iloc[st.session_state.idx % len(df)]
-    flip_class = "card-flip" if st.session_state.flipped else ""
-    
-    st.markdown(f'''
-    <div class="card-container" onclick="window.location.reload()">
-        <div class="card-inner {flip_class}">
-            <div class="card-front">{current_word['word']}</div>
-            <div class="card-back">{current_word['meaning']}</div>
-        </div>
-    </div>
-    ''', unsafe_allow_html=True)
-    
-    st.write(f"Word {st.session_state.idx + 1} of {len(df)}")
+    # ... (Flip Card CSS aur HTML yahan aayega)
+    st.info(f"Abhi total {len(df)} words hain tere paas.")
 else:
-    st.info("Bhai, database load ho raha hai... refresh karo!")
+    st.warning("Bhai, sidebar se PDF upload karo ya manually add karo!")
 
+# Buttons
 col1, col2 = st.columns(2)
 with col1:
-    if st.button("Flip Card"):
+    if st.button("Flip (Palto)"):
         st.session_state.flipped = not st.session_state.flipped
         st.rerun()
 with col2:
-    if st.button("Next Word"):
+    if st.button("Next (Agla)"):
         st.session_state.idx += 1
         st.session_state.flipped = False
         st.rerun()
