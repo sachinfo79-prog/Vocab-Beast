@@ -1,51 +1,72 @@
 import streamlit as st
 import sqlite3
 import pandas as pd
+from streamlit_keyup import st_keyup # Ye keyboard track karega
 
-# Database Setup
-def init_db():
-    conn = sqlite3.connect("vocab_beast.db")
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS flashcards
-                 (id INTEGER PRIMARY KEY, word TEXT UNIQUE, meaning TEXT, level INTEGER)''')
-    conn.commit()
-    conn.close()
+# Database setup
+conn = sqlite3.connect("vocab.db", check_same_thread=False)
+c = conn.cursor()
+c.execute('CREATE TABLE IF NOT EXISTS words (word TEXT, meaning TEXT)')
+conn.commit()
 
-init_db()
+st.set_page_config(page_title="Vocab Beast Pro", layout="centered")
 
-# Simple 3D Flip CSS
+# CSS for a beautiful 3D Flip Card
 st.markdown("""
 <style>
-    .flip-card { width: 300px; height: 200px; perspective: 1000px; margin: auto; }
-    .flip-card-inner { position: relative; width: 100%; height: 100%; transition: transform 0.6s; transform-style: preserve-3d; cursor: pointer; }
-    .flip-card:hover .flip-card-inner { transform: rotateY(180deg); }
-    .front, .back { position: absolute; width: 100%; height: 100%; backface-visibility: hidden; display: flex; align-items: center; justify-content: center; border-radius: 15px; font-size: 24px; box-shadow: 0 4px 8px rgba(0,0,0,0.2); }
-    .front { background: white; color: black; }
-    .back { background: #2e7d32; color: white; transform: rotateY(180deg); }
+    .card-container { perspective: 1000px; width: 100%; height: 300px; margin: 20px auto; }
+    .card-inner { position: relative; width: 100%; height: 100%; transition: transform 0.6s; transform-style: preserve-3d; cursor: pointer; }
+    .card-flip { transform: rotateY(180deg); }
+    .card-front, .card-back { position: absolute; width: 100%; height: 100%; backface-visibility: hidden; display: flex; align-items: center; justify-content: center; border-radius: 20px; font-size: 32px; font-weight: bold; box-shadow: 0 10px 30px rgba(0,0,0,0.2); text-align: center; padding: 20px; }
+    .card-front { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+    .card-back { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white; transform: rotateY(180deg); }
 </style>
 """, unsafe_allow_html=True)
 
-st.title("Vocab Beast v0.1 (Base)")
+st.title("Vocab Beast: Keyboard Edition ⚡")
+st.write("Tip: Press **Space** to flip, **Enter** for next word!")
 
-tab1, tab2 = st.tabs(["Practice", "Add New"])
+# Session state for tracking
+if 'idx' not in st.session_state: st.session_state.idx = 0
+if 'flipped' not in st.session_state: st.session_state.flipped = False
 
-with tab2:
-    word = st.text_input("English Word")
-    meaning = st.text_input("Hindi Meaning")
-    if st.button("Save"):
-        conn = sqlite3.connect("vocab_beast.db")
-        try:
-            conn.execute("INSERT INTO flashcards (word, meaning, level) VALUES (?, ?, 0)", (word, meaning))
-            conn.commit()
-            st.success("Saved! [cite: 2026-02-22]")
-        except: st.error("Already exists! [cite: 2026-02-22]")
-        conn.close()
+# Hidden Input for Keyboard Tracking
+key = st_keyup("Keyboard Shortcut", key="control_input", label_visibility="collapsed")
 
-with tab1:
-    conn = sqlite3.connect("vocab_beast.db")
-    df = pd.read_sql_query("SELECT * FROM flashcards", conn)
-    conn.close()
-    if not df.empty:
-        card = df.iloc[0]
-        st.markdown(f'<div class="flip-card"><div class="flip-card-inner"><div class="front">{card["word"]}</div><div class="back">{card["meaning"]}</div></div></div>', unsafe_allow_html=True)
-    else: st.write("No words yet.")
+# Simple Keyboard Logic
+if key == " ": # Spacebar
+    st.session_state.flipped = not st.session_state.flipped
+elif key == "Enter": # Enter key
+    st.session_state.idx += 1
+    st.session_state.flipped = False
+
+# Fetch Data
+df = pd.read_sql_query("SELECT * FROM words", conn)
+
+if not df.empty:
+    current_word = df.iloc[st.session_state.idx % len(df)]
+    flip_class = "card-flip" if st.session_state.flipped else ""
+    
+    # Render Card
+    st.markdown(f"""
+    <div class="card-container">
+        <div class="card-inner {flip_class}">
+            <div class="card-front">{current_word['word']}</div>
+            <div class="card-back">{current_word['meaning']}</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+else:
+    st.warning("Bhai, pehle 'Add' tab mein jaakar kuch words daalo!")
+
+# Buttons as fallback
+col1, col2 = st.columns(2)
+with col1:
+    if st.button("Flip (Space)"):
+        st.session_state.flipped = not st.session_state.flipped
+        st.rerun()
+with col2:
+    if st.button("Next (Enter)"):
+        st.session_state.idx += 1
+        st.session_state.flipped = False
+        st.rerun()
