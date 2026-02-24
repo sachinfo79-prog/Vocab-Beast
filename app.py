@@ -8,6 +8,28 @@ c = conn.cursor()
 c.execute('CREATE TABLE IF NOT EXISTS words (word TEXT, meaning TEXT)')
 conn.commit()
 
+# --- BULK UPLOAD MAGIC ---
+# Ye list tere saare words ko ek baar mein bhar degi
+initial_words = [
+    ("Abhor", "To hate something very much"),
+    ("Ameliorate", "To make something better"),
+    ("Anomalous", "Different from what is normal"),
+    ("Bellicose", "Willing to fight; aggressive"),
+    ("Cacophony", "A harsh, unpleasant mixture of sounds"),
+    ("Dearth", "A lack or shortage of something"),
+    ("Ephemeral", "Lasting for a very short time"),
+    ("Garrulous", "Excessively talkative"),
+    ("Inundate", "To overwhelm with things or people"),
+    ("Lethargic", "Lacking energy; lazy")
+    # Maine abhi 10 daale hain, tu isi format mein baaki jod sakta hai
+]
+
+# Check agar database khali hai toh hi dalo
+c.execute("SELECT COUNT(*) FROM words")
+if c.fetchone()[0] == 0:
+    c.executemany("INSERT INTO words (word, meaning) VALUES (?, ?)", initial_words)
+    conn.commit()
+
 st.set_page_config(page_title="Vocab Beast Pro", layout="centered")
 
 # CSS for Flip Card
@@ -33,9 +55,19 @@ df = pd.read_sql_query("SELECT * FROM words", conn)
 if not df.empty:
     current_word = df.iloc[st.session_state.idx % len(df)]
     flip_class = "card-flip" if st.session_state.flipped else ""
-    st.markdown(f'<div class="card-container"><div class="card-inner {flip_class}"><div class="card-front">{current_word["word"]}</div><div class="card-back">{current_word["meaning"]}</div></div></div>', unsafe_allow_html=True)
+    
+    st.markdown(f'''
+    <div class="card-container" onclick="window.location.reload()">
+        <div class="card-inner {flip_class}">
+            <div class="card-front">{current_word['word']}</div>
+            <div class="card-back">{current_word['meaning']}</div>
+        </div>
+    </div>
+    ''', unsafe_allow_html=True)
+    
+    st.write(f"Word {st.session_state.idx + 1} of {len(df)}")
 else:
-    st.info("Bhai, app live hai! Bas data upload karna baaki hai.")
+    st.info("Bhai, database load ho raha hai... refresh karo!")
 
 col1, col2 = st.columns(2)
 with col1:
